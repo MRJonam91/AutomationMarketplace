@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicurezza / Security
+    url: https://github.com/MRJonam91/AutomationMarketplace/security/advisories/new
+    about: Segnala una vulnerabilità di sicurezza in modo privato / Report a security vulnerability privately
