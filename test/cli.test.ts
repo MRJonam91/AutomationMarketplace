@@ -106,4 +106,32 @@ describe("CLI End-to-End", () => {
     );
     assert.match(output, /blueprint:\s*\n\s+name:/);
   });
+
+  test("rejects unsupported export format with exit code 1", () => {
+    assert.throws(
+      () => {
+        execFileSync(process.execPath, [cliPath, "export", "thermostat-window-saver", "--format", "invalid_fmt"], {
+          encoding: "utf8",
+          stdio: "pipe",
+        });
+      },
+      (err: any) => {
+        return err.status === 1;
+      }
+    );
+  });
+
+  test("handles audit on non-manifest json gracefully with exit code 1", () => {
+    assert.throws(
+      () => {
+        execFileSync(process.execPath, [cliPath, "audit", "package.json"], {
+          encoding: "utf8",
+          stdio: "pipe",
+        });
+      },
+      (err: any) => {
+        return err.status === 1;
+      }
+    );
+  });
 });

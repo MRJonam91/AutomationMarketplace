@@ -144,8 +144,8 @@ export function analyzeAutomationRisks(manifest: AutomationManifest): RiskAuditR
 
   // Pre-flight checklist generator
   const preFlightChecklist: string[] = [
-    `Confirm Home Assistant Core >= ${manifest.platform.minCoreVersion}`,
-    `Review required entities: ${manifest.requirements.entities.map((e) => `${e.domain} (${e.name})`).join(", ")}`,
+    `Confirm Home Assistant Core >= ${manifest.platform?.minCoreVersion ?? "2024.1.0"}`,
+    `Review required entities: ${(manifest.requirements?.entities ?? []).map((e) => `${e.domain} (${e.name})`).join(", ") || "none"}`,
   ];
 
   if (criticalActuatorsFound.length > 0) {
@@ -154,7 +154,7 @@ export function analyzeAutomationRisks(manifest: AutomationManifest): RiskAuditR
     );
   }
 
-  if (manifest.permissions.requiresHumanReview) {
+  if (manifest.permissions?.requiresHumanReview) {
     preFlightChecklist.push(
       "🔒 Human review required prior to live enablement (actuators require manual sign-off)",
     );

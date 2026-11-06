@@ -204,8 +204,8 @@ async function main() {
       console.log(`\nRollback Instructions:`);
       console.log(`  • Quick disable: ${item.rollback.quickDisable}`);
       console.log(`  • Restoration steps:`);
-      for (const step of item.rollback.stateRestoration) {
-        console.log(`    1. ${step}`);
+      for (let idx = 0; idx < item.rollback.stateRestoration.length; idx++) {
+        console.log(`    ${idx + 1}. ${item.rollback.stateRestoration[idx]}`);
       }
       console.log(`  • Fallback: ${item.rollback.fallbackProcedure}`);
 
@@ -415,9 +415,17 @@ async function main() {
         candidates = listAutomations();
       } else {
         const idList = idsArg.split(",").map((s) => s.trim());
+        const missingIds: string[] = [];
         for (const id of idList) {
           const item = getAutomation(id);
-          if (item) candidates.push(item);
+          if (item) {
+            candidates.push(item);
+          } else {
+            missingIds.push(id);
+          }
+        }
+        if (missingIds.length > 0) {
+          console.warn(`\x1b[33m⚠️ Warning: Automation ID(s) not found in catalog: ${missingIds.join(", ")}\x1b[0m`);
         }
       }
 
@@ -464,14 +472,22 @@ async function main() {
         candidates = listAutomations();
       } else {
         const idList = idsArg.split(",").map((s) => s.trim());
+        const missingIds: string[] = [];
         for (const id of idList) {
           const item = getAutomation(id);
-          if (item) candidates.push(item);
+          if (item) {
+            candidates.push(item);
+          } else {
+            missingIds.push(id);
+          }
+        }
+        if (missingIds.length > 0) {
+          console.warn(`\x1b[33m⚠️ Warning: Automation ID(s) not found in catalog: ${missingIds.join(", ")}\x1b[0m`);
         }
       }
 
       if (candidates.length === 0) {
-        console.error("Error: No matching automations found to bundle.");
+        console.error("Error: None of the requested automation IDs were found in the catalog.");
         process.exit(1);
       }
 
@@ -523,7 +539,21 @@ async function main() {
       let manifest: AutomationManifest;
 
       if (targetFile.endsWith(".json")) {
-        manifest = JSON.parse(content) as AutomationManifest;
+        try {
+          const parsed = JSON.parse(content);
+          const validation = validateManifest(parsed);
+          if (!validation.valid) {
+            console.error(`\x1b[31mError: Target file '${targetFile}' is not a valid automation manifest:\x1b[0m`);
+            for (const err of validation.errors) {
+              console.error(`  - ${err}`);
+            }
+            process.exit(1);
+          }
+          manifest = parsed as AutomationManifest;
+        } catch (e) {
+          console.error(`Error: Failed to parse JSON in '${targetFile}': ${(e as Error).message}`);
+          process.exit(1);
+        }
       } else {
         manifest = scaffoldManifestFromBlueprint(path.basename(targetFile, path.extname(targetFile)), content);
       }
@@ -597,6 +627,11 @@ action:
       }
 
       const format = ((flags["format"] as string) || "yaml").toLowerCase();
+      const validFormats = ["yaml", "json", "blueprint"];
+      if (!validFormats.includes(format)) {
+        console.error(`Error: Unsupported export format '${format}'. Supported formats: ${validFormats.join(", ")}`);
+        process.exit(1);
+      }
       let outputText = "";
 
       if (format === "json") {

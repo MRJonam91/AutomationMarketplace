@@ -20,7 +20,7 @@ export function generateMarkdownAuditReport(manifest: AutomationManifest): strin
     `| **Author** | ${manifest.author} |`,
     `| **Category** | \`${manifest.category}\` |`,
     `| **Safety Grade** | **${audit.safetyGrade}** (Risk Index: ${audit.riskIndex}/100) |`,
-    `| **HA Minimum Core** | \`>= ${manifest.platform.minCoreVersion}\` |`,
+    `| **HA Minimum Core** | \`>= ${manifest.platform?.minCoreVersion ?? "2024.1.0"}\` |`,
     `| **Rollback Complete** | ${audit.rollbackComplete ? "✅ Yes" : "❌ Incomplete"} |`,
     ``,
     `## 📋 Pre-Flight Safety Checklist`,
@@ -31,18 +31,18 @@ export function generateMarkdownAuditReport(manifest: AutomationManifest): strin
     ``,
     `| Category | Severity | Hazard Description | Enforced Mitigation |`,
     `|---|---|---|---|`,
-    ...manifest.risks.map(
+    ...(manifest.risks ?? []).map(
       (r) =>
         `| \`${r.category}\` | **${r.severity.toUpperCase()}** | ${r.description} | ${r.mitigation} |`
     ),
     ``,
     `## 🔄 Rollback & Emergency Restoration Procedure`,
     ``,
-    `- **Emergency Quick Disable**: ${manifest.rollback.quickDisable}`,
-    `- **Estimated Recovery Time**: ~${manifest.rollback.estimatedRecoverySeconds}s`,
+    `- **Emergency Quick Disable**: ${manifest.rollback?.quickDisable ?? "Manual disable"}`,
+    `- **Estimated Recovery Time**: ~${manifest.rollback?.estimatedRecoverySeconds ?? 30}s`,
     `- **Step-by-Step Restoration**:`,
-    ...manifest.rollback.stateRestoration.map((s, idx) => `  ${idx + 1}. ${s}`),
-    `- **Hardware Fallback**: ${manifest.rollback.fallbackProcedure}`,
+    ...(manifest.rollback?.stateRestoration ?? []).map((s, idx) => `  ${idx + 1}. ${s}`),
+    `- **Hardware Fallback**: ${manifest.rollback?.fallbackProcedure ?? "Manual intervention"}`,
     ``,
   ];
 
