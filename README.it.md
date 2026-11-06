@@ -45,6 +45,12 @@ npx automation-marketplace simulate thermostat-window-saver
 # Verifica che la procedura di rollback ripristini fedelmente lo stato iniziale
 npx automation-marketplace test-rollback thermostat-window-saver
 
+# Rileva conflitti e loop ricorsivi tra più automazioni attive
+npx automation-marketplace check-conflicts all
+
+# Raggruppa automazioni e helper in un Package Home Assistant unico
+npx automation-marketplace bundle thermostat-window-saver,water-leak-main-shutoff -o package.yaml
+
 # Audit di sicurezza approfondito su Blueprint o manifest esterno
 npx automation-marketplace audit ./blueprint.yaml --report-md ./audit-report.md
 
@@ -80,6 +86,8 @@ npx automation-marketplace export thermostat-window-saver > window_saver.yaml
 | `fridge-door-alarm-guard` | Sicurezza | HA >= 2024.1.0 | `Grade B (Guarded)` | Limite notifiche 5 min, reset automatico alla chiusura |
 | `water-leak-main-shutoff` | Sicurezza | HA >= 2024.1.0 | `Grade B (Guarded)` | Chiusura valvola d'emergenza a latenza zero, allarme push |
 | `solar-excess-water-heater` | Energia | HA >= 2024.1.0 | `Grade A Safe` | Debounce 5 min su immissione solare, isteresi di potenza |
+| `away-mode-lock-secure` | Sicurezza | HA >= 2024.1.0 | `Grade B (Guarded)` | Debounce allontanamento 3 min, verifica contatti perimetro |
+| `air-quality-ventilation-boost` | Qualità Aria | HA >= 2024.1.0 | `A+ Certified Safe` | Soglia CO2 1000ppm, ripristino velocità con isteresi a 700ppm |
 
 ---
 

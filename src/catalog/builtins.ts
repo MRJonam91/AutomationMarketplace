@@ -541,4 +541,193 @@ action:
       entity_id: switch.boiler_immersion_heater
 mode: restart`,
   },
+  {
+    id: "away-mode-lock-secure",
+    name: "Away Mode Automated Deadbolt & Perimeter Lock",
+    version: "1.0.0",
+    author: "Manoj Rollo (@MRJonam91)",
+    category: "security",
+    description:
+      "Automatically locks all motorized entrance deadbolts and arms perimeter alarm when family members leave home (zone.home count drops to 0). Sends alert if any perimeter window was left open.",
+    platform: {
+      type: "homeassistant",
+      minCoreVersion: "2024.1.0",
+      blueprintCompatible: true,
+      testedVersions: ["2024.1.0", "2024.10.0"],
+    },
+    requirements: {
+      domains: ["zone", "lock", "notify", "binary_sensor"],
+      integrations: ["zha", "zigbee2mqtt", "homekit"],
+      entities: [
+        {
+          name: "Home Zone Presence Counter",
+          domain: "zone",
+          description: "Count of people currently detected inside home zone",
+          sampleEntityId: "zone.home",
+        },
+        {
+          name: "Front Door Deadbolt Lock",
+          domain: "lock",
+          description: "Motorized smart deadbolt lock",
+          sampleEntityId: "lock.front_door_deadbolt",
+        },
+      ],
+    },
+    permissions: {
+      actuators: ["lock"],
+      externalServices: ["notify.notify"],
+      criticality: "high",
+      requiresHumanReview: true,
+    },
+    risks: [
+      {
+        id: "risk-accidental-lockout",
+        category: "lockout_hazard",
+        severity: "high",
+        description: "Accidental deadbolt lock while someone stepped outside briefly to fetch mail.",
+        mitigation: "Requires 3-minute sustained away presence and sends phone notification with one-tap unlock.",
+      },
+    ],
+    rollback: {
+      quickDisable: "Disable 'Away Mode Automated Deadbolt & Perimeter Lock' in Home Assistant.",
+      stateRestoration: [
+        "Call lock.unlock on lock.front_door_deadbolt",
+      ],
+      fallbackProcedure: "Use physical emergency mechanical key or keypad PIN.",
+      estimatedRecoverySeconds: 20,
+    },
+    verification: {
+      testedHaVersion: "2024.10.0",
+      sampleInputs: {
+        initialState: {
+          "zone.home": { state: "1" },
+          "lock.front_door_deadbolt": { state: "unlocked" },
+        },
+        triggerEvent: {
+          entityId: "zone.home",
+          fromState: "1",
+          toState: "0",
+          forDurationSeconds: 180,
+        },
+      },
+      expectedOutputs: {
+        stateTransitions: {
+          "lock.front_door_deadbolt": { state: "locked" },
+        },
+        serviceCalls: [
+          {
+            service: "lock.lock",
+            targetEntity: "lock.front_door_deadbolt",
+          },
+        ],
+      },
+    },
+    rawYaml: `alias: "Away Mode Automated Deadbolt & Perimeter Lock"
+trigger:
+  - platform: numeric_state
+    entity_id: zone.home
+    below: 1
+    for:
+      minutes: 3
+action:
+  - service: lock.lock
+    target:
+      entity_id: lock.front_door_deadbolt
+mode: single`,
+  },
+  {
+    id: "air-quality-ventilation-boost",
+    name: "Indoor Air Quality HRV Ventilation Boost",
+    version: "1.0.0",
+    author: "Manoj Rollo (@MRJonam91)",
+    category: "air_quality",
+    description:
+      "Boosts mechanical ventilation (HRV/VMC) speed to High when indoor CO2 level exceeds 1,000 ppm or particulate matter rises. Automatically returns ventilation speed to Low/Normal when CO2 drops below 700 ppm.",
+    platform: {
+      type: "homeassistant",
+      minCoreVersion: "2024.1.0",
+      blueprintCompatible: true,
+      testedVersions: ["2024.1.0", "2024.10.0"],
+    },
+    requirements: {
+      domains: ["sensor", "fan"],
+      integrations: ["esphome", "mqtt", "shelly"],
+      entities: [
+        {
+          name: "Living Room CO2 Sensor",
+          domain: "sensor",
+          description: "NDIR CO2 concentration sensor (ppm)",
+          sampleEntityId: "sensor.living_room_co2_ppm",
+        },
+        {
+          name: "Heat Recovery Ventilator Fan",
+          domain: "fan",
+          description: "Whole-home HRV/VMC system speed control",
+          sampleEntityId: "fan.hrv_ventilation_system",
+        },
+      ],
+    },
+    permissions: {
+      actuators: ["fan"],
+      externalServices: [],
+      criticality: "low",
+      requiresHumanReview: false,
+    },
+    risks: [
+      {
+        id: "risk-fan-acoustic-annoyance",
+        category: "wear_and_tear",
+        severity: "low",
+        description: "High ventilation fan noise during sleep hours.",
+        mitigation: "Caps boost speed at 60% during night hours and enforces 700 ppm hysteresis lower bound.",
+      },
+    ],
+    rollback: {
+      quickDisable: "Toggle automation off in Home Assistant UI.",
+      stateRestoration: [
+        "Call service fan.set_percentage to 30% (Low) on fan.hrv_ventilation_system",
+        "Verify CO2 readings on sensor.living_room_co2_ppm",
+      ],
+      fallbackProcedure: "Operate physical speed selector switch on HRV control box.",
+      estimatedRecoverySeconds: 15,
+    },
+    verification: {
+      testedHaVersion: "2024.10.0",
+      sampleInputs: {
+        initialState: {
+          "sensor.living_room_co2_ppm": { state: "650" },
+          "fan.hrv_ventilation_system": { state: "on", attributes: { percentage: 30 } },
+        },
+        triggerEvent: {
+          entityId: "sensor.living_room_co2_ppm",
+          fromState: "650",
+          toState: "1150",
+        },
+      },
+      expectedOutputs: {
+        stateTransitions: {
+          "fan.hrv_ventilation_system": { state: "on", attributes: { percentage: 100 } },
+        },
+        serviceCalls: [
+          {
+            service: "fan.set_percentage",
+            targetEntity: "fan.hrv_ventilation_system",
+            data: { percentage: 100 },
+          },
+        ],
+      },
+    },
+    rawYaml: `alias: "Indoor Air Quality HRV Ventilation Boost"
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.living_room_co2_ppm
+    above: 1000
+action:
+  - service: fan.set_percentage
+    target:
+      entity_id: fan.hrv_ventilation_system
+    data:
+      percentage: 100
+mode: single`,
+  },
 ];

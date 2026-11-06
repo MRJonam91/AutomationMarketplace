@@ -13,7 +13,7 @@ describe("Automation Catalog", () => {
     assert.strictEqual(item.category, "climate");
   });
 
-  test("retrieves newly added water leak shutoff and solar diverter", () => {
+  test("retrieves newly added water leak shutoff, solar diverter, away lock, and air quality boost", () => {
     const leak = getAutomation("water-leak-main-shutoff");
     assert.ok(leak);
     assert.strictEqual(leak.category, "safety");
@@ -22,6 +22,16 @@ describe("Automation Catalog", () => {
     const solar = getAutomation("solar-excess-water-heater");
     assert.ok(solar);
     assert.strictEqual(solar.category, "energy");
+
+    const away = getAutomation("away-mode-lock-secure");
+    assert.ok(away);
+    assert.strictEqual(away.category, "security");
+    assert.ok(away.permissions.actuators.includes("lock"));
+
+    const air = getAutomation("air-quality-ventilation-boost");
+    assert.ok(air);
+    assert.strictEqual(air.category, "air_quality");
+    assert.ok(air.permissions.actuators.includes("fan"));
   });
 
   test("returns undefined for unknown ID", () => {
@@ -46,9 +56,9 @@ describe("Automation Catalog", () => {
   });
 
   test("searches catalog by query string", () => {
-    const results = listAutomations({ query: "refrigerator" });
+    const results = listAutomations({ query: "ventilation" });
     assert.strictEqual(results.length, 1);
-    assert.strictEqual(results[0]?.id, "fridge-door-alarm-guard");
+    assert.strictEqual(results[0]?.id, "air-quality-ventilation-boost");
   });
 
   test("supports dynamic runtime registration of automations", () => {

@@ -10,6 +10,7 @@ const VALID_CATEGORIES = new Set([
   "lighting",
   "presence",
   "safety",
+  "air_quality",
   "convenience",
 ]);
 

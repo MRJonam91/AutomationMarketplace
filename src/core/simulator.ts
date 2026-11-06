@@ -3,6 +3,8 @@
 
 import type {
   AutomationManifest,
+  MultiStepScenarioTrace,
+  SequentialScenarioStep,
   ServiceCallEvent,
   SimulationStep,
   SimulationTrace,
@@ -129,6 +131,67 @@ export function simulateAutomation(
     finalState: state,
     serviceCalls: recordedServiceCalls,
     steps,
+    discrepancies,
+    durationMs: Math.max(1, Date.now() - startTime),
+  };
+}
+
+/**
+ * Runs a multi-step sequential scenario simulation through sequential triggers and state checks.
+ */
+export function simulateScenario(
+  manifest: AutomationManifest,
+  scenarioName: string,
+  scenarioSteps: SequentialScenarioStep[],
+  baseInitialState?: StateSnapshot,
+): MultiStepScenarioTrace {
+  const startTime = Date.now();
+  let currentState: StateSnapshot = {
+    ...JSON.parse(JSON.stringify(manifest.verification.sampleInputs.initialState)),
+    ...(baseInitialState ? JSON.parse(JSON.stringify(baseInitialState)) : {}),
+  };
+
+  const executedSteps: MultiStepScenarioTrace["executedSteps"] = [];
+  const discrepancies: string[] = [];
+
+  for (let idx = 0; idx < scenarioSteps.length; idx++) {
+    const stepDef = scenarioSteps[idx]!;
+
+    const stepManifest: AutomationManifest = {
+      ...manifest,
+      verification: {
+        ...manifest.verification,
+        sampleInputs: {
+          initialState: JSON.parse(JSON.stringify(currentState)),
+          triggerEvent: stepDef.triggerEvent,
+        },
+        expectedOutputs: {
+          stateTransitions: stepDef.expectedStateTransitions ?? {},
+          serviceCalls: stepDef.expectedServiceCalls ?? [],
+        },
+      },
+    };
+
+    const trace = simulateAutomation(stepManifest, currentState);
+    executedSteps.push({
+      stepIndex: idx + 1,
+      name: stepDef.name,
+      stepTrace: trace,
+    });
+
+    if (!trace.success) {
+      discrepancies.push(`Step ${idx + 1} (${stepDef.name}) failed: ${trace.discrepancies.join("; ")}`);
+    }
+
+    currentState = trace.finalState;
+  }
+
+  return {
+    success: discrepancies.length === 0,
+    scenarioName,
+    initialState: baseInitialState ?? manifest.verification.sampleInputs.initialState,
+    finalState: currentState,
+    executedSteps,
     discrepancies,
     durationMs: Math.max(1, Date.now() - startTime),
   };

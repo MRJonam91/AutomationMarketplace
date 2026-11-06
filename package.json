@@ -1,6 +1,6 @@
 {
   "name": "automation-marketplace",
-  "version": "0.2.0-alpha",
+  "version": "0.3.0-beta",
   "description": "Curated smart home automation catalog with manifest verification, safety risk analysis, deterministic simulation, and rollback guarantees for Home Assistant.",
   "type": "module",
   "license": "AGPL-3.0-only",

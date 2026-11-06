@@ -8,6 +8,7 @@ export type AutomationCategory =
   | "lighting"
   | "presence"
   | "safety"
+  | "air_quality"
   | "convenience";
 
 export type RiskSeverity = "low" | "medium" | "high" | "critical";
@@ -64,7 +65,8 @@ export interface RiskHazard {
     | "energy_waste"
     | "notification_spam"
     | "water_damage"
-    | "lockout_hazard";
+    | "lockout_hazard"
+    | "air_quality_degradation";
   severity: RiskSeverity;
   description: string;
   mitigation: string;
@@ -191,6 +193,61 @@ export interface SimulationTrace {
   steps: SimulationStep[];
   discrepancies: string[];
   durationMs: number;
+}
+
+export interface SequentialScenarioStep {
+  name: string;
+  triggerEvent: TriggerEvent;
+  delaySeconds?: number;
+  expectedStateTransitions?: StateSnapshot;
+  expectedServiceCalls?: ServiceCallEvent[];
+}
+
+export interface MultiStepScenarioTrace {
+  success: boolean;
+  scenarioName: string;
+  initialState: StateSnapshot;
+  finalState: StateSnapshot;
+  executedSteps: Array<{
+    stepIndex: number;
+    name: string;
+    stepTrace: SimulationTrace;
+  }>;
+  discrepancies: string[];
+  durationMs: number;
+}
+
+export interface ActuatorClash {
+  actuatorEntity: string;
+  automations: string[];
+  conflictingStates: string[];
+  severity: RiskSeverity;
+  description: string;
+}
+
+export interface CrossTriggerLoop {
+  automationA: string;
+  automationB: string;
+  entityAtoB: string;
+  entityBtoA: string;
+  severity: RiskSeverity;
+  description: string;
+}
+
+export interface SharedResourceContention {
+  triggerEntity: string;
+  automations: string[];
+  competingActions: string[];
+  description: string;
+}
+
+export interface ConflictReport {
+  hasConflicts: boolean;
+  clashes: ActuatorClash[];
+  crossTriggerLoops: CrossTriggerLoop[];
+  contentions: SharedResourceContention[];
+  conflictIndex: number; // 0 to 100
+  recommendations: string[];
 }
 
 export interface CatalogFilter {

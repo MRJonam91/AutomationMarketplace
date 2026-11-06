@@ -5,17 +5,20 @@
 import fs from "node:fs";
 import path from "node:path";
 import { scaffoldManifestFromBlueprint } from "../adapters/blueprint.ts";
+import { generateHaPackageBundle } from "../adapters/bundle.ts";
+import { loadManifestsFromDirectory } from "../adapters/loader.ts";
 import { generateMarkdownAuditReport } from "../adapters/report.ts";
 import { formatHaAutomationYaml, validateBasicHaYaml } from "../adapters/yaml.ts";
 import { analyzeAutomationRisks } from "../core/analyzer.ts";
 import { getAutomation, listAutomations } from "../core/catalog.ts";
+import { detectAutomationConflicts } from "../core/conflicts.ts";
 import { validateManifest } from "../core/manifest.ts";
 import { verifyRollbackProcedure } from "../core/rollback.ts";
-import { simulateAutomation } from "../core/simulator.ts";
-import type { AutomationCategory, AutomationManifest } from "../core/types.ts";
+import { simulateAutomation, simulateScenario } from "../core/simulator.ts";
+import type { AutomationCategory, AutomationManifest, SequentialScenarioStep } from "../core/types.ts";
 import { SPONSOR_HELP_LINE, sponsorFooter } from "../sponsor.ts";
 
-const VERSION = "0.2.0-alpha";
+const VERSION = "0.3.0-beta";
 
 const HELP_TEXT = `AutomationMarketplace v${VERSION} — Curated Smart Home Automation Catalog & Safety Guard
 
@@ -27,19 +30,26 @@ Commands:
   show <id>                Inspect automation manifest, requirements, risks & rollback
   validate <file>          Audit and lint a manifest JSON or Home Assistant YAML file
   simulate <id>            Run deterministic execution trace & state simulation
+  simulate-scenario <id>   Run multi-step sequential scenario simulation
   test-rollback <id>       Verify restoration of baseline states after simulated execution
+  check-conflicts <ids>    Detect actuator clashes & circular loops between automations
+  bundle <ids>             Bundle multiple automations & helpers into Home Assistant package
+  import <dir>             Import and register all manifests/blueprints from a directory
   audit <file>             Run in-depth safety audit report on manifest or blueprint
   scaffold <id>            Generate a verified manifest skeleton (from blueprint or scratch)
   export <id>              Export ready-to-import Home Assistant YAML or manifest JSON
 
 Options for list:
-  --category <category>    Filter by category (climate, energy, security, lighting, safety)
+  --category <category>    Filter by category (climate, energy, security, lighting, safety, air_quality)
   --query <text>           Search name, slug, or description
   --json                   Output list as raw JSON
 
-Options for show:
-  --yaml                   Display raw Home Assistant YAML alongside manifest
-  --json                   Output full manifest as JSON
+Options for check-conflicts / bundle:
+  Comma-separated IDs (e.g. thermostat-window-saver,night-presence-soft-light) or 'all'
+  -o, --output <file>      Target output file path
+
+Options for simulate-scenario:
+  --steps <file.json>      Path to JSON file defining sequential scenario steps
 
 Options for audit:
   --report-md <file>       Write detailed GitHub Flavored Markdown audit report to file
@@ -47,10 +57,6 @@ Options for audit:
 Options for scaffold:
   --blueprint <file>       Scaffold from existing Home Assistant Blueprint YAML
   -o, --output <file>      Target output JSON file path
-
-Options for export:
-  --format <yaml|json>     Export format (default: yaml)
-  -o, --output <file>      Write output directly to file
 
 General options:
   -v, --version            Show version
@@ -306,6 +312,52 @@ async function main() {
       break;
     }
 
+    case "simulate-scenario": {
+      const id = positional[1];
+      if (!id) {
+        console.error("Error: Please specify an automation ID.");
+        process.exit(1);
+      }
+
+      const item = getAutomation(id);
+      if (!item) {
+        console.error(`Error: Automation '${id}' not found in catalog.`);
+        process.exit(1);
+      }
+
+      const stepsFile = flags["steps"] as string | undefined;
+      let steps: SequentialScenarioStep[] = [];
+
+      if (stepsFile && fs.existsSync(stepsFile)) {
+        steps = JSON.parse(fs.readFileSync(stepsFile, "utf8"));
+      } else {
+        // Built-in demonstration scenario: Trigger -> Restored Cycle
+        steps = [
+          {
+            name: "Initial Event Trigger",
+            triggerEvent: item.verification.sampleInputs.triggerEvent,
+            expectedStateTransitions: item.verification.expectedOutputs.stateTransitions,
+            expectedServiceCalls: item.verification.expectedOutputs.serviceCalls,
+          },
+        ];
+      }
+
+      console.log(`\nRunning multi-step scenario simulation for '${item.name}' (${steps.length} steps)...`);
+      const scenarioTrace = simulateScenario(item, `Scenario for ${item.id}`, steps);
+
+      console.log(`Scenario status: ${scenarioTrace.success ? "\x1b[32mPASSED\x1b[0m" : "\x1b[31mFAILED\x1b[0m"} (${scenarioTrace.durationMs}ms)`);
+      for (const step of scenarioTrace.executedSteps) {
+        console.log(`  [Step ${step.stepIndex}] ${step.name}: ${step.stepTrace.success ? "✔ OK" : "✗ FAILED"}`);
+      }
+
+      if (!scenarioTrace.success) {
+        console.error("Scenario discrepancies:", scenarioTrace.discrepancies.join("; "));
+        process.exit(1);
+      }
+      sponsorFooter();
+      break;
+    }
+
     case "test-rollback": {
       const id = positional[1];
       if (!id) {
@@ -334,6 +386,101 @@ async function main() {
 
       if (!rollbackResult.success) {
         process.exit(1);
+      }
+      sponsorFooter();
+      break;
+    }
+
+    case "check-conflicts": {
+      const idsArg = positional[1] || "all";
+      let candidates: AutomationManifest[] = [];
+
+      if (idsArg.toLowerCase() === "all") {
+        candidates = listAutomations();
+      } else {
+        const idList = idsArg.split(",").map((s) => s.trim());
+        for (const id of idList) {
+          const item = getAutomation(id);
+          if (item) candidates.push(item);
+        }
+      }
+
+      console.log(`\nChecking cross-automation conflicts across ${candidates.length} automations...`);
+      const report = detectAutomationConflicts(candidates);
+
+      console.log(`Conflict Status: ${report.hasConflicts ? "\x1b[31mCONFLICTS DETECTED\x1b[0m" : "\x1b[32mNO HAZARDOUS CLASHES\x1b[0m"} (Risk score: ${report.conflictIndex}/100)`);
+      if (report.clashes.length > 0) {
+        console.log(`\nActuator Clashes (${report.clashes.length}):`);
+        for (const c of report.clashes) {
+          console.log(`  ⚠️ [${c.severity.toUpperCase()}] ${c.description}`);
+        }
+      }
+      if (report.crossTriggerLoops.length > 0) {
+        console.log(`\nCircular Ping-Pong Loops (${report.crossTriggerLoops.length}):`);
+        for (const loop of report.crossTriggerLoops) {
+          console.log(`  🚨 ${loop.description}`);
+        }
+      }
+      if (report.recommendations.length > 0) {
+        console.log(`\nRecommendations:`);
+        for (const rec of report.recommendations) {
+          console.log(`  • ${rec}`);
+        }
+      }
+      sponsorFooter();
+      break;
+    }
+
+    case "bundle": {
+      const idsArg = positional[1];
+      if (!idsArg) {
+        console.error("Error: Please provide comma-separated automation IDs to bundle (or 'all').");
+        process.exit(1);
+      }
+
+      let candidates: AutomationManifest[] = [];
+      if (idsArg.toLowerCase() === "all") {
+        candidates = listAutomations();
+      } else {
+        const idList = idsArg.split(",").map((s) => s.trim());
+        for (const id of idList) {
+          const item = getAutomation(id);
+          if (item) candidates.push(item);
+        }
+      }
+
+      if (candidates.length === 0) {
+        console.error("Error: No matching automations found to bundle.");
+        process.exit(1);
+      }
+
+      const bundleYaml = generateHaPackageBundle("smart_home_bundle", candidates);
+      const outFile = (flags["output"] as string) || (flags["o"] as string);
+
+      if (outFile) {
+        fs.writeFileSync(outFile, bundleYaml, "utf8");
+        console.log(`Generated Home Assistant package bundle saved to '${outFile}'.`);
+      } else {
+        console.log(bundleYaml);
+      }
+      break;
+    }
+
+    case "import": {
+      const dirPath = positional[1];
+      if (!dirPath) {
+        console.error("Error: Please specify directory path containing manifests or blueprints.");
+        process.exit(1);
+      }
+
+      console.log(`\nImporting manifests from directory '${dirPath}'...`);
+      const res = loadManifestsFromDirectory(dirPath);
+      console.log(`\x1b[32m✔ Successfully loaded & registered ${res.loaded.length} automation(s).\x1b[0m`);
+      if (res.errors.length > 0) {
+        console.log(`\nErrors encountered (${res.errors.length}):`);
+        for (const err of res.errors) {
+          console.error(`  - ${err.file}: ${err.message}`);
+        }
       }
       sponsorFooter();
       break;
