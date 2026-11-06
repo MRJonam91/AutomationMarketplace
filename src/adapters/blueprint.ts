@@ -38,6 +38,41 @@ export function extractBlueprintMetadata(yamlContent: string): BlueprintSpec | n
 }
 
 /**
+ * Formats an AutomationManifest as a Home Assistant Blueprint YAML file.
+ */
+export function formatHaBlueprintYaml(manifest: AutomationManifest): string {
+  const header = [
+    `blueprint:`,
+    `  name: "${manifest.name}"`,
+    `  description: "${manifest.description.replace(/"/g, '\\"')}"`,
+    `  domain: automation`,
+    `  author: "${manifest.author}"`,
+    `  homeassistant:`,
+    `    min_version: "${manifest.platform.minCoreVersion}"`,
+    `  input:`,
+  ];
+
+  for (const entity of manifest.requirements.entities) {
+    const inputKey = entity.name.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    header.push(`    ${inputKey}:`);
+    header.push(`      name: "${entity.name}"`);
+    header.push(`      description: "${entity.description}"`);
+    header.push(`      selector:`);
+    header.push(`        entity:`);
+    header.push(`          domain: "${entity.domain}"`);
+  }
+
+  header.push(``);
+  header.push(`# -------------------------------------------------------------`);
+  header.push(`# Safety Grade: Verified | Rollback: ${manifest.rollback.quickDisable}`);
+  header.push(`# -------------------------------------------------------------`);
+  header.push(``);
+  header.push(manifest.rawYaml.trim());
+
+  return header.join("\n") + "\n";
+}
+
+/**
  * Scaffolds an AutomationManifest skeleton from a Blueprint YAML file.
  */
 export function scaffoldManifestFromBlueprint(

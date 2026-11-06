@@ -8,6 +8,7 @@ export * from "./core/analyzer.ts";
 export * from "./core/simulator.ts";
 export * from "./core/rollback.ts";
 export * from "./core/conflicts.ts";
+export * from "./core/schema.ts";
 export * from "./core/catalog.ts";
 export * from "./catalog/builtins.ts";
 export * from "./adapters/yaml.ts";

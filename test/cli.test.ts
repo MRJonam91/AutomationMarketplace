@@ -8,11 +8,11 @@ import test, { describe } from "node:test";
 describe("CLI End-to-End", () => {
   const cliPath = "src/cli/index.ts";
 
-  test("prints version flag matching beta release", () => {
+  test("prints version flag matching stable v1.0.0 release", () => {
     const output = execFileSync(process.execPath, [cliPath, "--version"], {
       encoding: "utf8",
     });
-    assert.match(output, /^v0\.3\.0-beta/);
+    assert.match(output, /^v1\.0\.0/);
   });
 
   test("lists catalog entries in json mode", () => {
@@ -82,5 +82,28 @@ describe("CLI End-to-End", () => {
     const parsed = JSON.parse(output);
     assert.strictEqual(parsed.id, "bedroom-presence-dimmer");
     assert.ok(parsed.requirements.entities.length >= 1);
+  });
+
+  test("outputs json schema via CLI", () => {
+    const output = execFileSync(
+      process.execPath,
+      [cliPath, "schema"],
+      {
+        encoding: "utf8",
+      },
+    );
+    const parsed = JSON.parse(output);
+    assert.strictEqual(parsed.title, "AutomationManifest");
+  });
+
+  test("exports automation directly as Home Assistant blueprint via CLI", () => {
+    const output = execFileSync(
+      process.execPath,
+      [cliPath, "export", "thermostat-window-saver", "--format", "blueprint"],
+      {
+        encoding: "utf8",
+      },
+    );
+    assert.match(output, /blueprint:\s*\n\s+name:/);
   });
 });

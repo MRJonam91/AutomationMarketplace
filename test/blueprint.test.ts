@@ -5,8 +5,10 @@ import assert from "node:assert/strict";
 import test, { describe } from "node:test";
 import {
   extractBlueprintMetadata,
+  formatHaBlueprintYaml,
   scaffoldManifestFromBlueprint,
 } from "../src/adapters/blueprint.ts";
+import { getAutomation } from "../src/core/catalog.ts";
 import { validateManifest } from "../src/core/manifest.ts";
 
 describe("Home Assistant Blueprint Adapter", () => {
@@ -59,5 +61,17 @@ action:
       true,
       `Scaffolded manifest validation failed: ${validation.errors.join("; ")}`
     );
+  });
+
+  test("formats an automation manifest as valid Home Assistant Blueprint YAML", () => {
+    const item = getAutomation("thermostat-window-saver")!;
+    assert.ok(item);
+
+    const bpYaml = formatHaBlueprintYaml(item);
+    assert.ok(bpYaml.includes("blueprint:"));
+    assert.ok(bpYaml.includes("name: \"Smart Thermostat Window Open Energy Saver\""));
+    assert.ok(bpYaml.includes("input:"));
+    assert.ok(bpYaml.includes("room_climate_unit:"));
+    assert.ok(bpYaml.includes("domain: \"climate\""));
   });
 });

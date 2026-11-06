@@ -4,7 +4,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { scaffoldManifestFromBlueprint } from "../adapters/blueprint.ts";
+import { formatHaBlueprintYaml, scaffoldManifestFromBlueprint } from "../adapters/blueprint.ts";
 import { generateHaPackageBundle } from "../adapters/bundle.ts";
 import { loadManifestsFromDirectory } from "../adapters/loader.ts";
 import { generateMarkdownAuditReport } from "../adapters/report.ts";
@@ -14,11 +14,12 @@ import { getAutomation, listAutomations } from "../core/catalog.ts";
 import { detectAutomationConflicts } from "../core/conflicts.ts";
 import { validateManifest } from "../core/manifest.ts";
 import { verifyRollbackProcedure } from "../core/rollback.ts";
+import { getManifestJsonSchema } from "../core/schema.ts";
 import { simulateAutomation, simulateScenario } from "../core/simulator.ts";
 import type { AutomationCategory, AutomationManifest, SequentialScenarioStep } from "../core/types.ts";
 import { SPONSOR_HELP_LINE, sponsorFooter } from "../sponsor.ts";
 
-const VERSION = "0.3.0-beta";
+const VERSION = "1.0.0";
 
 const HELP_TEXT = `AutomationMarketplace v${VERSION} — Curated Smart Home Automation Catalog & Safety Guard
 
@@ -37,19 +38,20 @@ Commands:
   import <dir>             Import and register all manifests/blueprints from a directory
   audit <file>             Run in-depth safety audit report on manifest or blueprint
   scaffold <id>            Generate a verified manifest skeleton (from blueprint or scratch)
-  export <id>              Export ready-to-import Home Assistant YAML or manifest JSON
+  export <id>              Export ready-to-import Home Assistant YAML, Blueprint or JSON
+  schema                   Output formal JSON Schema for AutomationManifest specification
 
 Options for list:
   --category <category>    Filter by category (climate, energy, security, lighting, safety, air_quality)
   --query <text>           Search name, slug, or description
   --json                   Output list as raw JSON
 
-Options for check-conflicts / bundle:
-  Comma-separated IDs (e.g. thermostat-window-saver,night-presence-soft-light) or 'all'
-  -o, --output <file>      Target output file path
+Options for check-conflicts / test-rollback:
+  --json                   Output result in machine-readable JSON format for CI/CD
 
-Options for simulate-scenario:
-  --steps <file.json>      Path to JSON file defining sequential scenario steps
+Options for export:
+  --format <yaml|json|blueprint>  Export format (default: yaml)
+  -o, --output <file>             Write output directly to file
 
 Options for audit:
   --report-md <file>       Write detailed GitHub Flavored Markdown audit report to file
@@ -294,6 +296,11 @@ async function main() {
       console.log(`\nRunning deterministic simulation for '${item.name}'...`);
       const trace = simulateAutomation(item);
 
+      if (flags["json"]) {
+        console.log(JSON.stringify(trace, null, 2));
+        return;
+      }
+
       console.log(`Simulation status: ${trace.success ? "\x1b[32mPASSED\x1b[0m" : "\x1b[31mFAILED\x1b[0m"} (${trace.durationMs}ms)\n`);
       for (const step of trace.steps) {
         console.log(`[Step ${step.step}] ${step.description}`);
@@ -331,7 +338,6 @@ async function main() {
       if (stepsFile && fs.existsSync(stepsFile)) {
         steps = JSON.parse(fs.readFileSync(stepsFile, "utf8"));
       } else {
-        // Built-in demonstration scenario: Trigger -> Restored Cycle
         steps = [
           {
             name: "Initial Event Trigger",
@@ -344,6 +350,11 @@ async function main() {
 
       console.log(`\nRunning multi-step scenario simulation for '${item.name}' (${steps.length} steps)...`);
       const scenarioTrace = simulateScenario(item, `Scenario for ${item.id}`, steps);
+
+      if (flags["json"]) {
+        console.log(JSON.stringify(scenarioTrace, null, 2));
+        return;
+      }
 
       console.log(`Scenario status: ${scenarioTrace.success ? "\x1b[32mPASSED\x1b[0m" : "\x1b[31mFAILED\x1b[0m"} (${scenarioTrace.durationMs}ms)`);
       for (const step of scenarioTrace.executedSteps) {
@@ -371,10 +382,15 @@ async function main() {
         process.exit(1);
       }
 
-      console.log(`\nTesting rollback procedure for '${item.name}'...`);
       const simTrace = simulateAutomation(item);
       const rollbackResult = verifyRollbackProcedure(item, simTrace.finalState);
 
+      if (flags["json"]) {
+        console.log(JSON.stringify(rollbackResult, null, 2));
+        return;
+      }
+
+      console.log(`\nTesting rollback procedure for '${item.name}'...`);
       console.log(`Rollback Status: ${rollbackResult.success ? "\x1b[32mVERIFIED SAFE\x1b[0m" : "\x1b[31mRESTORATION DEFICIENT\x1b[0m"}`);
       console.log(`Restored Entities (${rollbackResult.restoredEntities.length}): ${rollbackResult.restoredEntities.join(", ") || "none"}`);
       if (rollbackResult.unrestoredEntities.length > 0) {
@@ -405,9 +421,14 @@ async function main() {
         }
       }
 
-      console.log(`\nChecking cross-automation conflicts across ${candidates.length} automations...`);
       const report = detectAutomationConflicts(candidates);
 
+      if (flags["json"]) {
+        console.log(JSON.stringify(report, null, 2));
+        return;
+      }
+
+      console.log(`\nChecking cross-automation conflicts across ${candidates.length} automations...`);
       console.log(`Conflict Status: ${report.hasConflicts ? "\x1b[31mCONFLICTS DETECTED\x1b[0m" : "\x1b[32mNO HAZARDOUS CLASHES\x1b[0m"} (Risk score: ${report.conflictIndex}/100)`);
       if (report.clashes.length > 0) {
         console.log(`\nActuator Clashes (${report.clashes.length}):`);
@@ -575,11 +596,13 @@ action:
         process.exit(1);
       }
 
-      const format = (flags["format"] as string) || "yaml";
+      const format = ((flags["format"] as string) || "yaml").toLowerCase();
       let outputText = "";
 
-      if (format.toLowerCase() === "json") {
+      if (format === "json") {
         outputText = JSON.stringify(item, null, 2);
+      } else if (format === "blueprint") {
+        outputText = formatHaBlueprintYaml(item);
       } else {
         outputText = formatHaAutomationYaml(item);
       }
@@ -590,6 +613,20 @@ action:
         console.log(`Exported '${item.id}' to '${outFile}'.`);
       } else {
         console.log(outputText);
+      }
+      break;
+    }
+
+    case "schema": {
+      const schemaObj = getManifestJsonSchema();
+      const schemaJson = JSON.stringify(schemaObj, null, 2);
+      const outFile = (flags["output"] as string) || (flags["o"] as string);
+
+      if (outFile) {
+        fs.writeFileSync(outFile, schemaJson, "utf8");
+        console.log(`JSON Schema written to '${outFile}'.`);
+      } else {
+        console.log(schemaJson);
       }
       break;
     }

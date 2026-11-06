@@ -56,6 +56,12 @@ npx automation-marketplace audit ./blueprint.yaml --report-md ./audit-report.md
 
 # Esporta YAML pulito per Home Assistant pronto per l'ambiente di test
 npx automation-marketplace export thermostat-window-saver > window_saver.yaml
+
+# Esporta direttamente come Blueprint per Home Assistant
+npx automation-marketplace export thermostat-window-saver --format blueprint > window_saver_blueprint.yaml
+
+# Esporta lo JSON Schema formale Draft-07 per validazione e autocompletamento IDE
+npx automation-marketplace schema > manifest.schema.json
 ```
 
 ---
