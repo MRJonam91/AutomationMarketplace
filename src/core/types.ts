@@ -29,11 +29,27 @@ export interface HelperDefinition {
   initialValue?: string | number | boolean;
 }
 
+export interface BlueprintInputSelector {
+  name: string;
+  description?: string;
+  default?: unknown;
+  selector: Record<string, unknown>;
+}
+
+export interface BlueprintSpec {
+  name: string;
+  domain: string;
+  description?: string;
+  author?: string;
+  inputs: Record<string, BlueprintInputSelector>;
+}
+
 export interface PlatformSpec {
   type: "homeassistant";
   minCoreVersion: string;
   blueprintCompatible: boolean;
   testedVersions: string[];
+  blueprint?: BlueprintSpec;
 }
 
 export interface RiskHazard {
@@ -46,7 +62,9 @@ export interface RiskHazard {
     | "wear_and_tear"
     | "fire_hazard"
     | "energy_waste"
-    | "notification_spam";
+    | "notification_spam"
+    | "water_damage"
+    | "lockout_hazard";
   severity: RiskSeverity;
   description: string;
   mitigation: string;
@@ -79,16 +97,18 @@ export interface ServiceCallEvent {
   data?: Record<string, unknown>;
 }
 
+export interface TriggerEvent {
+  entityId: string;
+  fromState: string;
+  toState: string;
+  forDurationSeconds?: number;
+}
+
 export interface VerificationSpec {
   testedHaVersion: string;
   sampleInputs: {
     initialState: StateSnapshot;
-    triggerEvent: {
-      entityId: string;
-      fromState: string;
-      toState: string;
-      forDurationSeconds?: number;
-    };
+    triggerEvent: TriggerEvent;
   };
   expectedOutputs: {
     stateTransitions: StateSnapshot;
@@ -123,6 +143,13 @@ export interface ManifestValidationResult {
   warnings: string[];
 }
 
+export interface SafetyRuleViolation {
+  ruleId: string;
+  severity: RiskSeverity;
+  message: string;
+  remediation: string;
+}
+
 export interface RiskAuditReport {
   safetyGrade: SafetyGrade;
   riskIndex: number; // 0 to 100
@@ -132,6 +159,16 @@ export interface RiskAuditReport {
   criticalActuatorsFound: string[];
   rollbackComplete: boolean;
   preFlightChecklist: string[];
+  violations: SafetyRuleViolation[];
+}
+
+export interface RollbackVerificationResult {
+  success: boolean;
+  restoredEntities: string[];
+  unrestoredEntities: string[];
+  recoverySteps: string[];
+  durationMs: number;
+  notes: string[];
 }
 
 export interface SimulationStep {

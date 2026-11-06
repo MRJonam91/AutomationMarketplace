@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import test, { describe } from "node:test";
-import { getAutomation, listAutomations } from "../src/core/catalog.ts";
+import { getAutomation, listAutomations, registerAutomation } from "../src/core/catalog.ts";
 
 describe("Automation Catalog", () => {
   test("retrieves automation by ID", () => {
@@ -11,6 +11,17 @@ describe("Automation Catalog", () => {
     assert.ok(item);
     assert.strictEqual(item.id, "thermostat-window-saver");
     assert.strictEqual(item.category, "climate");
+  });
+
+  test("retrieves newly added water leak shutoff and solar diverter", () => {
+    const leak = getAutomation("water-leak-main-shutoff");
+    assert.ok(leak);
+    assert.strictEqual(leak.category, "safety");
+    assert.ok(leak.permissions.actuators.includes("valve"));
+
+    const solar = getAutomation("solar-excess-water-heater");
+    assert.ok(solar);
+    assert.strictEqual(solar.category, "energy");
   });
 
   test("returns undefined for unknown ID", () => {
@@ -23,20 +34,33 @@ describe("Automation Catalog", () => {
     assert.ok(climateItems.length >= 1);
     assert.ok(climateItems.every((item) => item.category === "climate"));
 
-    const lightingItems = listAutomations({ category: "lighting" });
-    assert.ok(lightingItems.length >= 1);
-    assert.ok(lightingItems.every((item) => item.category === "lighting"));
+    const safetyItems = listAutomations({ category: "safety" });
+    assert.ok(safetyItems.length >= 2);
+    assert.ok(safetyItems.every((item) => item.category === "safety"));
   });
 
   test("filters catalog by domain requirement", () => {
-    const lightDomainItems = listAutomations({ domain: "light" });
-    assert.ok(lightDomainItems.length >= 1);
-    assert.ok(lightDomainItems.every((i) => i.requirements.domains.includes("light")));
+    const valveItems = listAutomations({ domain: "valve" });
+    assert.ok(valveItems.length >= 1);
+    assert.ok(valveItems.every((i) => i.requirements.domains.includes("valve")));
   });
 
   test("searches catalog by query string", () => {
     const results = listAutomations({ query: "refrigerator" });
     assert.strictEqual(results.length, 1);
     assert.strictEqual(results[0]?.id, "fridge-door-alarm-guard");
+  });
+
+  test("supports dynamic runtime registration of automations", () => {
+    const sample = getAutomation("night-presence-soft-light")!;
+    registerAutomation({
+      ...sample,
+      id: "custom-night-light-v2",
+      name: "Custom Night Light V2",
+    });
+
+    const retrieved = getAutomation("custom-night-light-v2");
+    assert.ok(retrieved);
+    assert.strictEqual(retrieved.name, "Custom Night Light V2");
   });
 });

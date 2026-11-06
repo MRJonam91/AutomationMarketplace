@@ -4,15 +4,18 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { scaffoldManifestFromBlueprint } from "../adapters/blueprint.ts";
+import { generateMarkdownAuditReport } from "../adapters/report.ts";
 import { formatHaAutomationYaml, validateBasicHaYaml } from "../adapters/yaml.ts";
 import { analyzeAutomationRisks } from "../core/analyzer.ts";
 import { getAutomation, listAutomations } from "../core/catalog.ts";
 import { validateManifest } from "../core/manifest.ts";
+import { verifyRollbackProcedure } from "../core/rollback.ts";
 import { simulateAutomation } from "../core/simulator.ts";
 import type { AutomationCategory, AutomationManifest } from "../core/types.ts";
 import { SPONSOR_HELP_LINE, sponsorFooter } from "../sponsor.ts";
 
-const VERSION = "0.1.0";
+const VERSION = "0.2.0-alpha";
 
 const HELP_TEXT = `AutomationMarketplace v${VERSION} — Curated Smart Home Automation Catalog & Safety Guard
 
@@ -24,6 +27,9 @@ Commands:
   show <id>                Inspect automation manifest, requirements, risks & rollback
   validate <file>          Audit and lint a manifest JSON or Home Assistant YAML file
   simulate <id>            Run deterministic execution trace & state simulation
+  test-rollback <id>       Verify restoration of baseline states after simulated execution
+  audit <file>             Run in-depth safety audit report on manifest or blueprint
+  scaffold <id>            Generate a verified manifest skeleton (from blueprint or scratch)
   export <id>              Export ready-to-import Home Assistant YAML or manifest JSON
 
 Options for list:
@@ -34,6 +40,13 @@ Options for list:
 Options for show:
   --yaml                   Display raw Home Assistant YAML alongside manifest
   --json                   Output full manifest as JSON
+
+Options for audit:
+  --report-md <file>       Write detailed GitHub Flavored Markdown audit report to file
+
+Options for scaffold:
+  --blueprint <file>       Scaffold from existing Home Assistant Blueprint YAML
+  -o, --output <file>      Target output JSON file path
 
 Options for export:
   --format <yaml|json>     Export format (default: yaml)
@@ -290,6 +303,115 @@ async function main() {
 
       console.log(`\n\x1b[32m✔ Verification complete: state transitions and service calls matched expectations deterministically.\x1b[0m`);
       sponsorFooter();
+      break;
+    }
+
+    case "test-rollback": {
+      const id = positional[1];
+      if (!id) {
+        console.error("Error: Please specify an automation ID to verify rollback for.");
+        process.exit(1);
+      }
+
+      const item = getAutomation(id);
+      if (!item) {
+        console.error(`Error: Automation '${id}' not found in catalog.`);
+        process.exit(1);
+      }
+
+      console.log(`\nTesting rollback procedure for '${item.name}'...`);
+      const simTrace = simulateAutomation(item);
+      const rollbackResult = verifyRollbackProcedure(item, simTrace.finalState);
+
+      console.log(`Rollback Status: ${rollbackResult.success ? "\x1b[32mVERIFIED SAFE\x1b[0m" : "\x1b[31mRESTORATION DEFICIENT\x1b[0m"}`);
+      console.log(`Restored Entities (${rollbackResult.restoredEntities.length}): ${rollbackResult.restoredEntities.join(", ") || "none"}`);
+      if (rollbackResult.unrestoredEntities.length > 0) {
+        console.log(`\x1b[31mUnrestored Entities (${rollbackResult.unrestoredEntities.length}): ${rollbackResult.unrestoredEntities.join(", ")}\x1b[0m`);
+      }
+      for (const note of rollbackResult.notes) {
+        console.log(`  • ${note}`);
+      }
+
+      if (!rollbackResult.success) {
+        process.exit(1);
+      }
+      sponsorFooter();
+      break;
+    }
+
+    case "audit": {
+      const targetFile = positional[1];
+      if (!targetFile) {
+        console.error("Error: Please specify a file path to audit.");
+        process.exit(1);
+      }
+
+      if (!fs.existsSync(targetFile)) {
+        console.error(`Error: File '${targetFile}' does not exist.`);
+        process.exit(1);
+      }
+
+      const content = fs.readFileSync(targetFile, "utf8");
+      let manifest: AutomationManifest;
+
+      if (targetFile.endsWith(".json")) {
+        manifest = JSON.parse(content) as AutomationManifest;
+      } else {
+        manifest = scaffoldManifestFromBlueprint(path.basename(targetFile, path.extname(targetFile)), content);
+      }
+
+      const reportMd = generateMarkdownAuditReport(manifest);
+      const outReport = flags["report-md"] as string | undefined;
+
+      if (outReport) {
+        fs.writeFileSync(outReport, reportMd, "utf8");
+        console.log(`Audit report generated and saved to: ${outReport}`);
+      } else {
+        console.log(reportMd);
+      }
+      break;
+    }
+
+    case "scaffold": {
+      const id = positional[1];
+      if (!id) {
+        console.error("Error: Please specify an automation slug ID to scaffold.");
+        process.exit(1);
+      }
+
+      const bpFile = flags["blueprint"] as string | undefined;
+      let bpYaml = `blueprint:
+  name: "Custom Automation ${id}"
+  description: "Scaffolded from template"
+  domain: automation
+  input:
+    target_light:
+      name: Target Light
+      selector:
+        entity:
+          domain: light
+trigger:
+  - platform: state
+    entity_id: binary_sensor.motion
+    to: "on"
+action:
+  - service: light.turn_on
+    target:
+      entity_id: !input target_light`;
+
+      if (bpFile && fs.existsSync(bpFile)) {
+        bpYaml = fs.readFileSync(bpFile, "utf8");
+      }
+
+      const scaffolded = scaffoldManifestFromBlueprint(id, bpYaml);
+      const outFile = (flags["output"] as string) || (flags["o"] as string);
+
+      if (outFile) {
+        fs.writeFileSync(outFile, JSON.stringify(scaffolded, null, 2), "utf8");
+        console.log(`Scaffolded manifest created at '${outFile}'.`);
+      } else {
+        console.log(JSON.stringify(scaffolded, null, 2));
+      }
       break;
     }
 

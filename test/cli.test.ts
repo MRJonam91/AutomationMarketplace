@@ -8,11 +8,11 @@ import test, { describe } from "node:test";
 describe("CLI End-to-End", () => {
   const cliPath = "src/cli/index.ts";
 
-  test("prints version flag", () => {
+  test("prints version flag matching alpha release", () => {
     const output = execFileSync(process.execPath, [cliPath, "--version"], {
       encoding: "utf8",
     });
-    assert.match(output, /^v0\.1\.0/);
+    assert.match(output, /^v0\.2\.0-alpha/);
   });
 
   test("lists catalog entries in json mode", () => {
@@ -21,18 +21,43 @@ describe("CLI End-to-End", () => {
     });
     const parsed = JSON.parse(output);
     assert.ok(Array.isArray(parsed));
-    assert.ok(parsed.length >= 3);
+    assert.ok(parsed.length >= 5);
   });
 
   test("simulates automation execution successfully via CLI", () => {
     const output = execFileSync(
       process.execPath,
-      [cliPath, "simulate", "thermostat-window-saver"],
+      [cliPath, "simulate", "water-leak-main-shutoff"],
       {
         encoding: "utf8",
       },
     );
     assert.match(output, /Simulation status: .*PASSED/);
-    assert.match(output, /Step 1/);
+    assert.match(output, /valve\.close_valve/);
+  });
+
+  test("tests rollback verification command via CLI", () => {
+    const output = execFileSync(
+      process.execPath,
+      [cliPath, "test-rollback", "thermostat-window-saver"],
+      {
+        encoding: "utf8",
+      },
+    );
+    assert.match(output, /Rollback Status: .*VERIFIED SAFE/);
+    assert.match(output, /climate\.living_room_thermostat/);
+  });
+
+  test("scaffolds a manifest from template via CLI", () => {
+    const output = execFileSync(
+      process.execPath,
+      [cliPath, "scaffold", "bedroom-presence-dimmer"],
+      {
+        encoding: "utf8",
+      },
+    );
+    const parsed = JSON.parse(output);
+    assert.strictEqual(parsed.id, "bedroom-presence-dimmer");
+    assert.ok(parsed.requirements.entities.length >= 1);
   });
 });

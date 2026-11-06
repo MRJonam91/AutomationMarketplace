@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0-alpha] - 2026-11-06
+
+### Added
+- Rollback Verification Engine (`src/core/rollback.ts`): verifies that documented rollback procedures completely restore initial baseline states after simulated execution.
+- Home Assistant Blueprint Adapter (`src/adapters/blueprint.ts`): parses blueprint headers, extracts inputs, and auto-scaffolds marketplace manifests.
+- Markdown Audit Reporter (`src/adapters/report.ts`): generates formatted GitHub Flavored Markdown pre-flight audit reports.
+- Extended verified catalog in `src/catalog/builtins.ts`:
+  - `water-leak-main-shutoff`: emergency main plumbing shutoff valve with critical push alert.
+  - `solar-excess-water-heater`: photovoltaic surplus diverter for boiler immersion heating element with 5-minute sustain debounce.
+- Dynamic runtime registry in `src/core/catalog.ts` via `registerAutomation`.
+- Deep safety risk boundary rules in `src/core/analyzer.ts`: recursive trigger loop detection, thermal cycling debounce verification, unattended lock checks.
+- CLI commands: `test-rollback <id>`, `audit <file> [--report-md]`, and `scaffold <id> [--blueprint]`.
+- Expanded test suite to 28 tests across 9 test suites with 100% pass rate.
+
 ## [0.1.0] - 2026-11-06
 
 ### Added

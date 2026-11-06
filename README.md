@@ -42,6 +42,12 @@ npx automation-marketplace show thermostat-window-saver
 # Deterministic simulated dry-run (no physical hardware touched)
 npx automation-marketplace simulate thermostat-window-saver
 
+# Verify rollback procedure restores initial baseline states
+npx automation-marketplace test-rollback thermostat-window-saver
+
+# Run deep safety audit on an external Blueprint or Manifest
+npx automation-marketplace audit ./blueprint.yaml --report-md ./audit-report.md
+
 # Export clean Home Assistant YAML ready for your test environment
 npx automation-marketplace export thermostat-window-saver > window_saver.yaml
 ```
@@ -72,6 +78,8 @@ npx automation-marketplace export thermostat-window-saver > window_saver.yaml
 | `thermostat-window-saver` | Climate | HA >= 2024.1.0 | `Grade C (Guarded)` | 120s compressor debounce, 12°C frost protection guard |
 | `night-presence-soft-light` | Lighting | HA >= 2024.1.0 | `A+ Certified Safe` | 15% capped brightness, 90s auto-off timeout |
 | `fridge-door-alarm-guard` | Safety | HA >= 2024.1.0 | `Grade B (Guarded)` | 5-minute alert rate-limit, auto-clear on close |
+| `water-leak-main-shutoff` | Safety | HA >= 2024.1.0 | `Grade B (Guarded)` | Zero-latency emergency shutoff valve, critical push alert |
+| `solar-excess-water-heater` | Energy | HA >= 2024.1.0 | `Grade A Safe` | 5-minute sustain debounce, power hysteresis bounds |
 
 ---
 
